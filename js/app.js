@@ -124,6 +124,7 @@ const App = (() => {
       </div>
       <div class="story-body">
         <span class="chip" style="--c:${cat.color || '#ccc'}">${cat.icon || ''} ${State.lang === 'hi' ? (cat.nameHi || '') : (cat.nameEn || '')}</span>
+        ${(story.authorName || story.authorPhoto || story.uid) ? authorHTML(story) : ''}
         <h3 class="story-title">${escapeHtml(title)}</h3>
         <div class="story-text">${
           hasLang
@@ -147,8 +148,7 @@ const App = (() => {
         if (act === 'tts') toggleRead(root, btn, story);
         if (act === 'share') shareStory(story);
         if (act === 'save') {
-          State.addStory({ ...story });
-          toast(t('saved'));
+          saveStory({ ...story });
         }
       });
     });
@@ -178,8 +178,21 @@ const App = (() => {
     }
   }
 
+  /* Save a story — always to the device, and to Firestore (cloud) when
+     Firebase is configured. Works for signed-in AND anonymous users. */
+  function saveStory(story) {
+    if (story && !story.createdAt) story.createdAt = Date.now();
+    if (story && !story.id) story.id = 'st-' + Date.now();
+    FirebaseStore.addStory({ ...story }).then(r => {
+      toast(r && r.cloud
+        ? (State.lang === 'hi' ? '☁️ कहानी क्लाउड में सहेजी गई' : '☁️ Saved to cloud')
+        : t('saved'));
+    }).catch(() => toast(t('saved')));
+  }
+
   /* ---------- Render: GENERATOR ---------- */
   let genCat = null;
+  let currentView = 'home';
   function openGenerator(catId) {
     genCat = catId;
     const cat = category(catId);
@@ -233,7 +246,7 @@ const App = (() => {
     `;
     try {
       const story = await AI.generate({ categoryId: genCat, lang: State.lang, userIdea: idea });
-      State.addStory({ ...story });
+      saveStory({ ...story });
       slot.className = 'story-card pop-in';
       slot.innerHTML = storyCardHTML(story, { open: true });
       bindStoryCard(slot, story);
@@ -247,30 +260,53 @@ const App = (() => {
     }
   }
 
-  /* ---------- Render: LIBRARY ---------- */
-  function renderLibrary() {
+  /* ---------- Render: LIBRARY (community feed) ---------- */
+  async function renderLibrary() {
     const main = $('#view');
-    const list = State.savedStories;
     main.innerHTML = `
       <button class="btn ghost back-btn" data-act="home">← ${t('home')}</button>
       <section class="card fade-up">
-        <div class="card-head"><h2>📚 ${t('library')} <span class="count">(${list.length})</span></h2></div>
-        ${list.length === 0
-          ? `<div class="loading"><div class="loading-emoji">📚</div><p>${t('empty')}</p></div>`
-          : `<div class="story-list">${list.map((s, i) => `<div class="story-card-mini stagger" style="--i:${i}" data-id="${s.id}">
-              <img src="${s.imageUrl}" alt=""/>
-              <div>
-                <span class="chip" style="--c:${(category(s.categoryId)||{}).color||'#ccc'}">${(category(s.categoryId)||{}).icon||''} ${State.lang==='hi'?(category(s.categoryId)||{}).nameHi||'':(category(s.categoryId)||{}).nameEn||''}</span>
-                <h3 class="story-title sm">${escapeHtml(pickLang(s, 'title'))}</h3>
-                <span class="muted">${timeAgo(s.createdAt)}</span>
-              </div>
-            </div>`).join('')}</div>`}
+        <div class="card-head"><h2>📚 ${t('library')} <span class="count" id="lib-count"></span></h2></div>
+        <p class="muted">${State.lang==='hi' ? 'समुदाय की कहानियाँ — सभी उपयोगकर्ताओं से ☁️' : 'Community stories — from everyone ☁️'}</p>
+        <div id="lib-list" class="loading">
+          <div class="loading-emoji">📚</div>
+          <div class="loading-dots"><span></span><span></span><span></span></div>
+          <p>${t('generating')}</p>
+        </div>
       </section>
     `;
     $('.back-btn').addEventListener('click', () => navigate('home'));
-    main.querySelectorAll('.story-card-mini').forEach(el =>
+
+    // Load the community feed from Firestore; fall back to on-device stories
+    // when Firebase is not configured or is offline.
+    let list = State.savedStories;
+    const cloud = await FirebaseStore.getStories();
+    if (cloud !== null) list = cloud;
+
+    const listEl = $('#lib-list');
+    $('#lib-count').textContent = `(${list.length})`;
+    if (list.length === 0) {
+      listEl.className = 'loading';
+      listEl.innerHTML = `<div class="loading-emoji">📚</div><p>${t('empty')}</p>`;
+      return;
+    }
+    listEl.className = 'story-list';
+    listEl.innerHTML = list.map((s, i) => {
+      const cat = category(s.categoryId) || {};
+      const id = s.id || s.cloudId || i;
+      return `<div class="story-card-mini stagger" style="--i:${i}" data-id="${id}">
+        <img src="${s.imageUrl}" alt=""/>
+        <div>
+          <span class="chip" style="--c:${cat.color||'#ccc'}">${cat.icon||''} ${State.lang==='hi'?(cat.nameHi||''):(cat.nameEn||'')}</span>
+          <h3 class="story-title sm">${escapeHtml(pickLang(s, 'title'))}</h3>
+          ${authorHTML(s)}
+        </div>
+      </div>`;
+    }).join('');
+
+    listEl.querySelectorAll('.story-card-mini').forEach(el =>
       el.addEventListener('click', () => {
-        const s = list.find(x => x.id === el.dataset.id);
+        const s = list.find(x => (x.id || x.cloudId) === el.dataset.id);
         if (s) openStoryView(s);
       })
     );
@@ -296,6 +332,15 @@ const App = (() => {
       <button class="btn ghost back-btn" data-act="home">← ${t('home')}</button>
       <section class="card fade-up">
         <div class="card-head"><h2>⚙️ ${t('settings')}</h2></div>
+
+        <div class="set-row">
+          <div>
+            <strong>${State.lang==='hi' ? 'खाता' : 'Account'}</strong>
+            <p class="muted" id="acct-status"></p>
+          </div>
+          <button id="auth-btn" class="btn primary">${State.lang==='hi' ? 'साइन इन करें' : 'Sign in'}</button>
+        </div>
+        <hr/>
 
         <div class="set-row">
           <div>
@@ -370,6 +415,40 @@ const App = (() => {
     `;
     $('.back-btn').addEventListener('click', () => navigate('home'));
 
+    // Account section
+    const acctStatus = $('#acct-status');
+    const authBtn = $('#auth-btn');
+    if (!FirebaseStore.isConfigured()) {
+      acctStatus.textContent = State.lang==='hi'
+        ? 'Firebase सेट नहीं — js/firebase-config.js में कुंजियाँ भरें'
+        : 'Firebase not configured — add keys in js/firebase-config.js';
+      authBtn.disabled = true; authBtn.textContent = '—';
+    } else {
+      const u = FirebaseStore.getUser();
+      if (u && !u.isAnonymous) {
+        acctStatus.innerHTML = (State.lang==='hi' ? 'इस रूप में साइन इन:' : 'Signed in as') + ' <b>' + escapeHtml(u.name || u.email) + '</b>';
+        authBtn.textContent = State.lang==='hi' ? 'साइन आउट' : 'Sign out';
+      } else if (u && u.isAnonymous) {
+        acctStatus.textContent = State.lang==='hi' ? 'मेहमान के रूप में सहेजना (क्लाउड पर) ☁️' : 'Saving as guest (cloud) ☁️';
+        authBtn.textContent = State.lang==='hi' ? 'Google से साइन इन' : 'Sign in with Google';
+      } else {
+        acctStatus.textContent = State.lang==='hi' ? 'कनेक्ट हो रहा है…' : 'Connecting…';
+        authBtn.textContent = State.lang==='hi' ? 'साइन इन करें' : 'Sign in';
+      }
+      authBtn.addEventListener('click', async () => {
+        const cu = FirebaseStore.getUser();
+        if (cu && !cu.isAnonymous) {
+          await FirebaseStore.signOut(); toast(State.lang==='hi' ? 'साइन आउट' : 'Signed out');
+        } else {
+          try {
+            await FirebaseStore.signInWithGoogle();
+            toast(State.lang==='hi' ? 'स्वागत है! ☁️' : 'Welcome! ☁️');
+          } catch (e) { toast(e.message || 'Sign-in failed'); }
+          renderSettings(); // reflect the new account
+        }
+      });
+    }
+
     $('#lang-seg').querySelectorAll('button').forEach(b =>
       b.addEventListener('click', () => {
         State.lang = b.dataset.lang; DB.set('lang', State.lang);
@@ -418,6 +497,7 @@ const App = (() => {
 
   /* ---------- Navigation ---------- */
   function navigate(view) {
+    currentView = view;
     TTS.stop();
     document.querySelectorAll('.nav-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.view === view)
@@ -428,9 +508,21 @@ const App = (() => {
     else if (view === 'settings') renderSettings();
   }
 
-  /* ---------- Chrome (header / nav / language pill) ---------- */
+  /* ---------- Chrome (header / nav / language pill / user button) ---------- */
   function updateChrome() {
     $('#lang-pill').textContent = State.lang === 'hi' ? 'हिंदी' : 'EN';
+    const ub = $('#user-btn');
+    if (!ub) return;
+    const u = FirebaseStore.getUser();
+    if (u && !u.isAnonymous && u.photoURL) {
+      ub.innerHTML = `<img class="avatar" src="${escapeHtml(u.photoURL)}" alt="" referrerpolicy="no-referrer"/>`;
+      ub.title = u.name || u.email || 'Signed in';
+      ub.classList.add('signed');
+    } else {
+      ub.innerHTML = '👤';
+      ub.title = u && u.isAnonymous ? (State.lang==='hi' ? 'मेहमान के रूप में साइन इन' : 'Signed in as guest') : 'Sign in';
+      ub.classList.remove('signed');
+    }
   }
 
   /* ---------- Tiny utilities ---------- */
@@ -474,6 +566,22 @@ const App = (() => {
     if (hrs < 24) return hrs + 'h ago';
     return Math.floor(hrs / 24) + 'd ago';
   }
+  /* Author row shown on community stories (avatar, name, guest badge). */
+  function authorHTML(s) {
+    const photo = s.authorPhoto;
+    const name = s.authorName || 'Guest';
+    const anon = !!(s.anonymous || !s.authorName);
+    const badge = anon ? `<span class="guest-badge">${State.lang==='hi' ? 'मेहमान' : 'Guest'}</span>` : '';
+    const avatar = photo
+      ? `<img class="author-avatar" src="${escapeHtml(photo)}" alt="" referrerpolicy="no-referrer"/>`
+      : `<span class="author-avatar">👤</span>`;
+    return `<div class="author-row">
+      ${avatar}
+      <span class="author-name">${escapeHtml(name)}</span>${badge}
+      ${s.createdAt ? `<span class="muted"> · ${timeAgo(s.createdAt)}</span>` : ''}
+    </div>`;
+  }
+
   let toastTimer;
   function toast(msg) {
     let el = $('#toast');
@@ -501,6 +609,27 @@ const App = (() => {
       updateChrome();
       navigate('home');
     });
+
+    // Firebase: init once, then keep the UI in sync when auth changes
+    // (signed-in vs anonymous). Works for both.
+    FirebaseStore.init();
+    FirebaseStore.subscribe(() => {
+      updateChrome();
+      if (currentView === 'settings') renderSettings();
+    });
+    $('#user-btn').addEventListener('click', () => {
+      const u = FirebaseStore.getUser();
+      if (u && !u.isAnonymous) {
+        FirebaseStore.signOut();
+      } else if (FirebaseStore.isConfigured()) {
+        FirebaseStore.signInWithGoogle()
+          .then(() => toast(State.lang === 'hi' ? 'स्वागत है! ☁️' : 'Welcome! ☁️'))
+          .catch(e => toast(e.message || 'Sign-in failed'));
+      } else {
+        toast(State.lang === 'hi' ? 'पहले Firebase सेट करें' : 'Set up Firebase first');
+      }
+    });
+
     document.querySelectorAll('.nav-btn').forEach(b =>
       b.addEventListener('click', () => navigate(b.dataset.view))
     );
