@@ -1,5 +1,5 @@
 /* Katha Kids — Service Worker (offline-first shell caching) */
-const CACHE = 'kathakids-v1';
+const CACHE = 'kathakids-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,8 @@ const ASSETS = [
   './js/db.js',
   './js/tts.js',
   './js/ai.js',
+  './js/firebase-config.js',
+  './js/firebase.js',
   './js/app.js',
   './manifest.webmanifest',
   './icons/icon.svg',
