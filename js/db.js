@@ -25,6 +25,7 @@ const State = {
     // keep the library from growing without bound
     this.savedStories = this.savedStories.slice(0, 200);
     DB.set('savedStories', this.savedStories);
+    return story;
   },
   setDaily(dateKey, story) {
     this.dailyCache[dateKey] = story;
