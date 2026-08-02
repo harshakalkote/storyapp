@@ -1,5 +1,5 @@
 /* Katha Kids — Service Worker (offline-first shell caching) */
-const CACHE = 'kathakids-v3';
+const CACHE = 'kathakids-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -38,6 +38,13 @@ self.addEventListener('fetch', (e) => {
   // Never cache AI provider calls — always go to network.
   if (url.hostname.includes('openai.com') ||
       url.hostname.includes('googleapis.com')) {
+    return;
+  }
+
+  // Config file is never cached — always fetch the fresh copy so key
+  // changes propagate to users without needing a cache bump.
+  if (url.pathname.endsWith('firebase-config.js')) {
+    e.respondWith(fetch(request).catch(() => caches.match(request)));
     return;
   }
 
