@@ -1,5 +1,5 @@
 /* Katha Kids — Service Worker (offline-first shell caching) */
-const CACHE = 'kathakids-v2';
+const CACHE = 'kathakids-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -41,16 +41,18 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // For same-origin app shell: cache-first, then network fallback.
+  // For same-origin app shell: serve cached immediately (offline-capable)
+  // and re-fetch in the background so updates propagate automatically.
   if (url.origin === self.location.origin) {
     e.respondWith(
-      caches.match(request).then((cached) =>
-        cached || fetch(request).then((res) => {
+      caches.match(request).then((cached) => {
+        const network = fetch(request).then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(request, copy));
           return res;
-        }).catch(() => caches.match('./index.html'))
-      )
+        }).catch(() => cached || caches.match('./index.html'));
+        return cached || network;
+      })
     );
   }
 });
