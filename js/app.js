@@ -110,13 +110,21 @@ const App = (() => {
     const title = pickLang(story, 'title');
     const text = pickLang(story, 'text');
     const moral = pickLang(story, 'moral');
-    const otherLangText = pickLang(story, 'text', State.lang === 'hi' ? 'en' : 'hi');
     const readMins = Math.max(1, Math.round(text.join(' ').split(/\s+/).length / 110));
     const hasLang = text.length > 0;
     const tag = State.lang === 'hi' ? `⏱ ${readMins} मिनट` : `⏱ ${readMins} min`;
     // If the AI image URL fails to load (rate limit, offline, etc.), swap to built-in SVG art.
     const fallback = svgArt(story.categoryId);
     const onError = `this.onerror=null; this.src='${fallback}';`;
+    // Idempotent save button: show "Saved" if the story is already in
+    // the local library. The id is set by ensureStoryId() in db.js.
+    ensureStoryId(story);
+    const alreadySaved = State.hasStory(story.id);
+    const saveLabel = alreadySaved
+      ? (State.lang === 'hi' ? '✓ सहेजा गया' : '✓ Saved')
+      : (State.lang === 'hi' ? 'सहेजें' : 'Save');
+    const saveEmoji = alreadySaved ? '' : '💾 ';
+    const saveDisabled = alreadySaved ? 'disabled' : '';
     return `
       <div class="story-img-wrap">
         <img class="story-img" src="${story.imageUrl}" alt="${escapeHtml(title)}" loading="lazy" onerror="${escapeHtml(onError)}"/>
@@ -135,7 +143,7 @@ const App = (() => {
         ${open ? `<div class="story-actions">
           <button class="btn ghost" data-act="tts">${t('readAloud')}</button>
           <button class="btn ghost" data-act="share">${t('share')}</button>
-          <button class="btn ghost" data-act="save">💾 ${State.lang === 'hi' ? 'सहेजें' : 'Save'}</button>
+          <button class="btn ghost" data-act="save" data-story-id="${escapeHtml(story.id)}" ${saveDisabled}>${saveEmoji}${saveLabel}</button>
         </div>` : ''}
       </div>
     `;
@@ -147,9 +155,7 @@ const App = (() => {
         const act = btn.dataset.act;
         if (act === 'tts') toggleRead(root, btn, story);
         if (act === 'share') shareStory(story);
-        if (act === 'save') {
-          saveStory({ ...story });
-        }
+        if (act === 'save') saveStory({ ...story }, btn);
       });
     });
   }
@@ -179,15 +185,31 @@ const App = (() => {
   }
 
   /* Save a story — always to the device, and to Firestore (cloud) when
-     Firebase is configured. Works for signed-in AND anonymous users. */
-  function saveStory(story) {
+     Firebase is configured. Works for signed-in AND anonymous users.
+     IDEMPOTENT: re-saving the same story is a no-op; the button gets
+     disabled and shows "✓ Saved" so the user gets clear feedback and
+     cannot accidentally create duplicates. */
+  function saveStory(story, btn) {
+    if (btn) btn.disabled = true;
     if (story && !story.createdAt) story.createdAt = Date.now();
-    if (story && !story.id) story.id = 'st-' + Date.now();
     FirebaseStore.addStory({ ...story }).then(r => {
-      toast(r && r.cloud
-        ? (State.lang === 'hi' ? '☁️ कहानी क्लाउड में सहेजी गई' : '☁️ Saved to cloud')
-        : t('saved'));
-    }).catch(() => toast(t('saved')));
+      if (r && r.deduped) {
+        toast(State.lang === 'hi' ? '✓ पहले से सहेजी हुई' : '✓ Already saved');
+      } else if (r && r.cloud) {
+        toast(State.lang === 'hi' ? '☁️ कहानी क्लाउड में सहेजी गई' : '☁️ Saved to cloud');
+      } else {
+        toast(t('saved'));
+      }
+      if (btn) {
+        // Permanently mark as saved; further clicks become a no-op.
+        btn.textContent = (State.lang === 'hi' ? '✓ सहेजा गया' : '✓ Saved');
+        btn.disabled = true;
+      }
+    }).catch((e) => {
+      console.error('Save failed', e);
+      toast(t('saved'));
+      if (btn) btn.disabled = false;   // let the user retry
+    });
   }
 
   /* ---------- Render: GENERATOR ---------- */
@@ -291,9 +313,14 @@ const App = (() => {
       return;
     }
     listEl.className = 'story-list';
+    const isAdmin = FirebaseStore.isAdmin();
     listEl.innerHTML = list.map((s, i) => {
       const cat = category(s.categoryId) || {};
       const id = s.id || s.cloudId || i;
+      const cloudId = s.cloudId || '';
+      const deleteBtn = (isAdmin && cloudId)
+        ? `<button class="admin-delete-btn" data-cloud-id="${escapeHtml(cloudId)}" title="${State.lang==='hi'?'व्यवस्थापक: हटाएँ':'Admin: delete'}" aria-label="Delete">🗑</button>`
+        : '';
       return `<div class="story-card-mini stagger" style="--i:${i}" data-id="${id}">
         <img src="${s.imageUrl}" alt=""/>
         <div>
@@ -301,6 +328,7 @@ const App = (() => {
           <h3 class="story-title sm">${escapeHtml(pickLang(s, 'title'))}</h3>
           ${authorHTML(s)}
         </div>
+        ${deleteBtn}
       </div>`;
     }).join('');
 
@@ -310,6 +338,34 @@ const App = (() => {
         if (s) openStoryView(s);
       })
     );
+
+    // Admin delete buttons: confirm, then call FirebaseStore.deleteStory.
+    // The card's own click listener is fine — we stop propagation so it
+    // doesn't also open the story.
+    listEl.querySelectorAll('.admin-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const cloudId = btn.dataset.cloudId;
+        const card = btn.closest('.story-card-mini');
+        const titleEl = card && card.querySelector('.story-title');
+        const title = titleEl ? titleEl.textContent : 'this story';
+        const ok = confirm((State.lang==='hi'
+          ? 'क्या आप वाक़ई यह कहानी हटाना चाहते हैं?\n\n'
+          : 'Permanently delete this story?\n\n')
+          + '“' + title + '”');
+        if (!ok) return;
+        btn.disabled = true;
+        try {
+          await FirebaseStore.deleteStory(cloudId);
+          toast(State.lang==='hi' ? '🗑 कहानी हटा दी गई' : '🗑 Story deleted');
+          renderLibrary(); // re-render the feed
+        } catch (err) {
+          console.error(err);
+          toast((State.lang==='hi' ? 'हटाने में विफल: ' : 'Delete failed: ') + (err.message || err));
+          btn.disabled = false;
+        }
+      });
+    });
   }
 
   function openStoryView(story) {
@@ -616,6 +672,7 @@ const App = (() => {
     FirebaseStore.subscribe(() => {
       updateChrome();
       if (currentView === 'settings') renderSettings();
+      if (currentView === 'library') renderLibrary(); // show/hide admin 🗑 buttons
     });
     $('#user-btn').addEventListener('click', () => {
       const u = FirebaseStore.getUser();
