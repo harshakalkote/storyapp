@@ -33,6 +33,19 @@ const FIREBASE_STORY_COLLECTION = "stories";
 /* Auto-sign-in visitors anonymously so guests can also save to the cloud. */
 const FIREBASE_ANON_SIGNIN = true;
 
+/* ---------------------------------------------------------------------
+ *  Admin allowlist
+ *  -------------------------------------------------------------------
+ *  Email addresses here are treated as admins in the client UI (they
+ *  see the 🗑 button on community stories). The REAL enforcement is
+ *  in `firestore.rules` — these emails must match exactly the emails
+ *  listed there, otherwise the button will appear but Firestore will
+ *  reject the delete with PERMISSION_DENIED.
+ *  --------------------------------------------------------------------- */
+const ADMIN_EMAILS = [
+  // "you@gmail.com",
+];
+
 /* True once you've pasted real credentials. Used to enable cloud features. */
 function firebaseConfigured() {
   return !!(FIREBASE_CONFIG &&
