@@ -64,6 +64,17 @@ const FirebaseStore = (() => {
   function isConfigured() { return configured; }
   function isReady() { return configured && !!(auth && db && currentUser); }
 
+  /* True if the signed-in user is on the admin allowlist. The
+     allowlist lives in ADMIN_EMAILS (firebase-config.js) and MUST
+     match the email list in firestore.rules. */
+  function isAdmin() {
+    const u = currentUser;
+    if (!u || u.isAnonymous || !u.email) return false;
+    if (!Array.isArray(ADMIN_EMAILS) || ADMIN_EMAILS.length === 0) return false;
+    return ADMIN_EMAILS.map(e => String(e).trim().toLowerCase())
+                        .includes(u.email.trim().toLowerCase());
+  }
+
   /* ---------- Authentication ---------- */
   function signInWithGoogle() {
     if (!auth) return Promise.reject(new Error('Firebase not configured yet. Add your keys in js/firebase-config.js.'));
@@ -79,31 +90,42 @@ const FirebaseStore = (() => {
     return auth.signOut().catch(e => console.warn('Sign-out error', e));
   }
 
-  /* ---------- Saving a story (works for signed-in AND anonymous) ---------- */
+  /* ---------- Saving a story (works for signed-in AND anonymous) ----------
+   * Saves are IDEMPOTENT: the story's content-derived id is used as the
+   * Firestore document id, so re-saving the same story updates the same
+   * document instead of creating a duplicate. The caller is expected to
+   * have run ensureStoryId() (State.addStory does this). */
   async function addStory(story) {
-    // Always keep an on-device copy as an offline fallback.
-    const local = State.addStory({ ...story });
+    // Always keep an on-device copy as an offline fallback. This also
+    // ensures the story has a content-derived id.
+    const r = State.addStory({ ...story });
+    const localStory = r.story;
+    const deduped = r.deduped;
 
-    if (!configured || !db) return { local, cloud: false };
+    if (!configured || !db) return { story: localStory, local: true, cloud: false, deduped };
 
     const u = currentUser;
     const doc = {
-      ...story,
+      ...localStory,
       uid: u ? u.uid : null,
       authorName: u ? (u.name || (u.isAnonymous ? 'Guest' : '')) : 'Guest',
       authorEmail: u ? u.email : '',
       authorPhoto: u ? u.photoURL : '',
       anonymous: u ? u.isAnonymous : true,
-      createdAt: story.createdAt || Date.now(),
+      createdAt: localStory.createdAt || Date.now(),
       savedAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
 
     try {
-      const ref = await db.collection(FIREBASE_STORY_COLLECTION).add(doc);
-      return { local, cloud: true, id: ref.id };
+      // Use the content-derived id as the document id so re-saves are
+      // idempotent at the cloud level (no duplicate rows in the feed).
+      await db.collection(FIREBASE_STORY_COLLECTION)
+              .doc(localStory.id)
+              .set(doc, { merge: true });
+      return { story: localStory, local: true, cloud: true, deduped, id: localStory.id };
     } catch (e) {
       console.warn('FirebaseStore: cloud save failed, kept locally', e);
-      return { local, cloud: false };
+      return { story: localStory, local: true, cloud: false, deduped };
     }
   }
 
@@ -134,10 +156,25 @@ const FirebaseStore = (() => {
       );
   }
 
+  /* ---------- Admin: delete a community story ---------- */
+  /* Deletes a single story from the cloud by its Firestore doc id.
+     Throws if Firebase isn't configured, the user isn't an admin,
+     or Firestore rejects the delete (PERMISSION_DENIED). */
+  async function deleteStory(cloudId) {
+    if (!configured || !db) throw new Error('Firebase not configured.');
+    if (!cloudId) throw new Error('Missing story id.');
+    if (!isAdmin()) {
+      throw new Error('Only admins can delete stories. Sign in with an admin account.');
+    }
+    await db.collection(FIREBASE_STORY_COLLECTION).doc(cloudId).delete();
+    return { id: cloudId };
+  }
+
   return {
     init, subscribe, getUser,
-    isConfigured, isReady,
+    isConfigured, isReady, isAdmin,
     signInWithGoogle, signOut,
     addStory, getStories, onStoriesSnapshot,
+    deleteStory,
   };
 })();
