@@ -44,6 +44,7 @@ const FIREBASE_ANON_SIGNIN = true;
  *  --------------------------------------------------------------------- */
 const ADMIN_EMAILS = [
   // "you@gmail.com",
+  "kalkote.harsha@gmail.com"
 ];
 
 /* True once you've pasted real credentials. Used to enable cloud features. */
