@@ -46,33 +46,45 @@ Create a delightful story that sparks curiosity, imagination, and learning.
 1. STRUCTURE (300-400 words total):
    - A captivating title (3-6 words, exciting and clear)
    - 5-7 short paragraphs (2-3 sentences each)
-   - A heartwarming moral or lesson at the end
+   - End with a meaningful takeaway that naturally follows from the story 
 2. TONE & STYLE:
    - Warm, encouraging, and full of wonder
    - Simple vocabulary suitable for ages 4-6
    - Active voice, present or simple past tense
-   - Use repetition for engagement (e.g., "Again! Again!")
-   - Include onomatopoeia where fitting (Buzz! Splash! Giggle!)
+   - Use repetition for engagement when appropriate 
+   - Include onomatopoeia where fitting (Buzz! Splash! Giggle!) 
+   - Allow a natural range of emotions, including happiness, curiosity
 3. CHARACTER GUIDELINES:
-   - Relatable child protagonist or friendly animal
-   - Give the main character a simple, memorable name
-   - Show emotions clearly (happy, curious, proud, excited)
-   - No villains, violence, or scary elements
+   - Relatable child protagonist or friendly animal 
+   - Give the main character a simple, memorable name 
+   - Characters should have distinct personalities, wants, and motivations 
+   - Characters may make mistakes, disagree, compete, fail, change their minds, or solve problems 
+   - Keep characters age-appropriate and avoid genuinely frightening situations 
+   - Do not automatically make cooperation, generosity, independence, competition, obedience, rebellion, or sacrifice the "correct" choice; let the story determine what works
 4. FOR SCIENCE THEMES:
-   - Frame science as asking "Why?" and "How?"
-   - Introduce 1-2 simple science concepts with child-friendly explanations
-   - Include a mini "experiment" or discovery moment
-   - Use sensory details (colors, sounds, textures)
+   - Frame science as asking "Why?" and "How?" 
+   - Introduce 1-2 simple science concepts with child-friendly explanations 
+   - Include a mini experiment or discovery moment 
+   - Use sensory details such as colors, sounds, textures, and movement 
+   - Do not sacrifice scientific accuracy merely to make the story more sentimental
 5. ENGAGEMENT ELEMENTS:
-   - Include 1-2 direct questions to the reader
-   - End with a "Think About It" question for discussion
-   - Create a satisfying, happy resolution
-6. WHAT TO AVOID:
-   - Complex sentences or advanced vocabulary
-   - Abstract concepts without concrete examples
-   - Fear, conflict, or negative emotions as drivers
-   - More than 3 named characters
-   - Any content that could frighten a young child
+   -Include 1-2 direct questions to the reader where natural 
+   - End with a "Think About It" question for discussion 
+   - Create a satisfying resolution, but the protagonist does not always need to win or get exactly what they wanted
+6. MORAL / TAKEAWAY: 
+	- The lesson must arise naturally from the events of the story 
+	- Do not force every story to teach kindness, cooperation, sharing, or helping others
+	- Vary lessons across stories when appropriate 
+	- Possible themes include curiosity, courage, honesty, responsibility, perseverance, patience, creativity, independence, friendship, generosity, self-reliance, fair competition, keeping promises, learning from mistakes, respecting others, problem-solving, and accepting consequences 
+	- Do not present one political, social, economic, or philosophical worldview as universally correct 
+	- Avoid preaching or political messaging 
+7. WHAT TO AVOID: 
+	- Complex sentences or advanced vocabulary 
+	- Abstract concepts without concrete examples 
+	- Graphic violence, cruelty, abuse, or genuinely frightening situations
+	- More than 3 named characters - Explicit political, religious, or ideological messaging 
+	- Forced moral lessons unrelated to the plot 
+	- Making one character morally superior simply because they are more generous, cooperative, rebellious, traditional, competitive, independent, or socially conscious
 === OUTPUT FORMAT ===
 Return ONLY valid JSON with this exact structure:
 {
@@ -87,12 +99,7 @@ Return ONLY valid JSON with this exact structure:
     const user = `Create a children's story with these details:
 Category: ${nameEn} and
 Plot: ${ideaLine}
-Guidelines:
-- Write for children ages 4-6 years
-- Keep it joyful, safe, and wonder-filled
-- 5-7 short paragraphs that flow naturally
-- End with a simple, positive moral
-- Return ONLY the JSON object, no markdown, no explanations
+Guidelines:  Write for children ages 4-6 years - Keep the story age-appropriate, engaging, and imaginative - Allow natural emotions and age-appropriate problems or challenges - 5-7 short paragraphs that flow naturally - Let the characters' actions and experiences produce the lesson naturally - Vary the type of lesson from story to story - Do not automatically make helping others, cooperation, independence, competition, obedience, rebellion, generosity, or self-sacrifice the moral - Avoid political or ideological messaging - End with a simple takeaway that fits the specific story - Return ONLY the JSON object, no markdown, no explanations
 Story:`;
    console.log("user prompt int the function:", user);
     return { sys, user};
