@@ -61,14 +61,25 @@ const CATEGORIES = [
     descHi: 'सी.वी. रमन, कलाम, क्यूरी, आइंस्टीन और अन्य।',
   },
   {
-    id: 'rishi',
-    nameEn: 'Rishi & Sant of India',
-    nameHi: 'भारत के ऋषि और संत',
-    icon: '🕉️',
-    color: '#E0A458',
-    descEn: 'Vedic sages and saints: wisdom, kindness, dharma.',
-    descHi: 'वैदिक ऋषि और संत: ज्ञान, दया, धर्म।',
-  },
+  id: 'rishi',
+  nameEn: 'Rishi, Sant & Ancient Wisdom',
+  nameHi: 'ऋषि, संत और प्राचीन ज्ञान',
+  icon: '🕉️',
+  color: '#E0A458',
+  descEn:
+    'Rishis and saints, Vedas, Upanishads, Bhagavad Gita, Dharma, Karma, Yoga, Bhakti, meditation, wisdom and the timeless philosophy of India.',
+  descHi:
+    'ऋषि और संत, वेद, उपनिषद, भगवद्गीता, धर्म, कर्म, योग, भक्ति, ध्यान, ज्ञान और भारत का सनातन दर्शन।',
+},
+{
+id: 'warriors',
+nameEn: 'Great Warriors',
+nameHi: 'महान योद्धा',
+icon: '🛡️',
+color: '#C96A3D',
+descEn: 'Warriors, heroes, leadership, courage, strategy and sacrifice.',
+descHi: 'योद्धा, वीरता, नेतृत्व, साहस, रणनीति और त्याग।',
+},
 ];
 
 /* ---------- UI strings (EN / HI) ---------- */
